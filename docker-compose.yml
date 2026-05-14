@@ -1,0 +1,24 @@
+# Brings up the companion service. Storage is SQLite, persisted on a
+# named volume so data survives container restarts.
+# Usage:
+#   docker compose up --build
+#   docker compose down        # stop, keep data
+#   docker compose down -v     # stop and wipe DB
+
+services:
+  companion:
+    build: .
+    container_name: companion-service
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    env_file:
+      - .env
+    environment:
+      # Store the DB on the mounted volume so it persists across restarts.
+      BOT_DB_PATH: /data/companion.db
+    volumes:
+      - companion-data:/data
+
+volumes:
+  companion-data:

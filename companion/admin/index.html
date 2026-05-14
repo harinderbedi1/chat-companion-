@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bot Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    [hidden] { display: none !important; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+  <!-- ─── Login overlay ─────────────────────────────────────────────── -->
+  <div id="login-overlay" class="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-xl p-8 w-full max-w-md">
+      <h1 class="text-2xl font-semibold mb-2">Bot Admin</h1>
+      <p class="text-sm text-slate-500 mb-6">Enter the admin token to continue.</p>
+      <input
+        id="token-input"
+        type="password"
+        placeholder="BOT_ADMIN_TOKEN"
+        class="w-full border border-slate-300 rounded-lg px-3 py-2 mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <p id="login-error" class="text-sm text-red-600 mt-2" hidden></p>
+      <button
+        id="login-btn"
+        class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg"
+      >Sign in</button>
+    </div>
+  </div>
+
+  <!-- ─── Main app ──────────────────────────────────────────────────── -->
+  <div id="app" hidden>
+    <header class="bg-white border-b border-slate-200">
+      <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <h1 class="text-xl font-semibold">Bot Admin</h1>
+        <div class="flex items-center gap-3">
+          <button
+            id="refresh-btn"
+            class="text-sm bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg"
+          >Refresh</button>
+          <button
+            id="signout-btn"
+            class="text-sm text-slate-500 hover:text-slate-700"
+          >Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-6 py-8 space-y-8">
+
+      <!-- Stats cards -->
+      <section>
+        <h2 class="text-sm uppercase tracking-wide text-slate-500 mb-3">Stats</h2>
+        <div id="stats-cards" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+      </section>
+
+      <!-- User list view -->
+      <section id="user-list-view">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm uppercase tracking-wide text-slate-500">Users</h2>
+          <input
+            id="user-search"
+            placeholder="Filter by user_id"
+            class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-64 mono"
+          />
+        </div>
+        <div class="bg-white rounded-xl shadow overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 text-slate-600">
+              <tr>
+                <th class="text-left px-4 py-2">user_id</th>
+                <th class="text-right px-4 py-2">messages</th>
+                <th class="text-right px-4 py-2">last seen</th>
+                <th class="text-right px-4 py-2 w-24"></th>
+              </tr>
+            </thead>
+            <tbody id="user-rows"></tbody>
+          </table>
+          <p id="users-empty" class="text-center text-slate-400 py-8" hidden>No users yet.</p>
+        </div>
+      </section>
+
+      <!-- User detail view -->
+      <section id="user-detail-view" hidden>
+        <button id="back-btn" class="text-sm text-blue-600 hover:underline mb-3">← Back to users</button>
+        <div class="bg-white rounded-xl shadow p-6">
+          <div class="flex items-baseline justify-between mb-4">
+            <h2 class="text-xl font-semibold mono" id="user-detail-id"></h2>
+            <div class="text-sm text-slate-500">
+              <span id="user-detail-count"></span>
+              <span class="mx-2">·</span>
+              <span id="user-detail-last-seen"></span>
+            </div>
+          </div>
+          <div id="user-detail-messages" class="space-y-3"></div>
+          <p id="user-detail-empty" class="text-center text-slate-400 py-8" hidden>No messages.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    // ── Token management ───────────────────────────────────────────────
+    const TOKEN_KEY = "bot_admin_token";
+    const tokenInput = document.getElementById("token-input");
+    const loginBtn = document.getElementById("login-btn");
+    const loginError = document.getElementById("login-error");
+    const loginOverlay = document.getElementById("login-overlay");
+    const app = document.getElementById("app");
+
+    function getToken() { return localStorage.getItem(TOKEN_KEY); }
+    function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
+    function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+
+    async function api(path) {
+      const token = getToken();
+      const res = await fetch(path, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      if (res.status === 401) {
+        clearToken();
+        showLogin();
+        throw new Error("unauthorized");
+      }
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`HTTP ${res.status}: ${body}`);
+      }
+      return res.json();
+    }
+
+    // ── Login flow ─────────────────────────────────────────────────────
+    function showLogin() {
+      loginOverlay.hidden = false;
+      app.hidden = true;
+      tokenInput.value = "";
+      tokenInput.focus();
+    }
+
+    function showApp() {
+      loginOverlay.hidden = true;
+      app.hidden = false;
+      refresh();
+    }
+
+    async function tryLogin() {
+      const t = tokenInput.value.trim();
+      if (!t) return;
+      setToken(t);
+      loginError.hidden = true;
+      try {
+        await api("/admin/stats");
+        showApp();
+      } catch (e) {
+        loginError.textContent = "Invalid token.";
+        loginError.hidden = false;
+      }
+    }
+    loginBtn.addEventListener("click", tryLogin);
+    tokenInput.addEventListener("keydown", (e) => { if (e.key === "Enter") tryLogin(); });
+
+    document.getElementById("signout-btn").addEventListener("click", () => {
+      clearToken();
+      showLogin();
+    });
+
+    // ── Stats cards ────────────────────────────────────────────────────
+    const statsCards = document.getElementById("stats-cards");
+    function renderStats(s) {
+      const items = [
+        { label: "All-time", value: s.total_messages },
+        { label: "Today", value: s.messages_today },
+        { label: "Last 7 days", value: s.messages_7d },
+        { label: "Safety rejected", value: s.safety_rejected },
+      ];
+      statsCards.innerHTML = items.map(i => `
+        <div class="bg-white rounded-xl shadow p-4">
+          <div class="text-xs uppercase tracking-wide text-slate-500">${i.label}</div>
+          <div class="text-2xl font-semibold mt-1">${i.value.toLocaleString()}</div>
+        </div>
+      `).join("");
+    }
+
+    // ── User list ──────────────────────────────────────────────────────
+    let allUsers = [];
+    const userRows = document.getElementById("user-rows");
+    const usersEmpty = document.getElementById("users-empty");
+    const userSearch = document.getElementById("user-search");
+
+    function formatLastSeen(ts) {
+      if (!ts) return "—";
+      const date = new Date(ts * 1000);
+      return date.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+    }
+
+    function renderUsers(users) {
+      if (!users.length) {
+        userRows.innerHTML = "";
+        usersEmpty.hidden = false;
+        return;
+      }
+      usersEmpty.hidden = true;
+      userRows.innerHTML = users.map(u => `
+        <tr class="border-t border-slate-100 hover:bg-slate-50">
+          <td class="px-4 py-2 mono">${escapeHtml(u.user_id)}</td>
+          <td class="px-4 py-2 text-right">${u.message_count.toLocaleString()}</td>
+          <td class="px-4 py-2 text-right text-slate-500">${formatLastSeen(u.last_seen)}</td>
+          <td class="px-4 py-2 text-right">
+            <button data-user="${escapeHtml(u.user_id)}" class="text-blue-600 hover:underline">View</button>
+          </td>
+        </tr>
+      `).join("");
+      userRows.querySelectorAll("button[data-user]").forEach(btn => {
+        btn.addEventListener("click", () => openUser(btn.dataset.user));
+      });
+    }
+
+    userSearch.addEventListener("input", () => {
+      const q = userSearch.value.trim().toLowerCase();
+      const filtered = q ? allUsers.filter(u => u.user_id.toLowerCase().includes(q)) : allUsers;
+      renderUsers(filtered);
+    });
+
+    // ── User detail ────────────────────────────────────────────────────
+    const userListView = document.getElementById("user-list-view");
+    const userDetailView = document.getElementById("user-detail-view");
+    const userDetailId = document.getElementById("user-detail-id");
+    const userDetailCount = document.getElementById("user-detail-count");
+    const userDetailLastSeen = document.getElementById("user-detail-last-seen");
+    const userDetailMessages = document.getElementById("user-detail-messages");
+    const userDetailEmpty = document.getElementById("user-detail-empty");
+
+    async function openUser(userId) {
+      try {
+        const detail = await api(`/admin/users/${encodeURIComponent(userId)}`);
+        userDetailId.textContent = detail.user_id;
+        userDetailCount.textContent = `${detail.message_count.toLocaleString()} messages`;
+        userDetailLastSeen.textContent = `last seen ${formatLastSeen(detail.last_seen)}`;
+        if (!detail.messages.length) {
+          userDetailMessages.innerHTML = "";
+          userDetailEmpty.hidden = false;
+        } else {
+          userDetailEmpty.hidden = true;
+          userDetailMessages.innerHTML = detail.messages.map(m => renderMessage(m)).join("");
+        }
+        userListView.hidden = true;
+        userDetailView.hidden = false;
+        window.scrollTo(0, 0);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function renderMessage(m) {
+      const isHuman = m.role === "human" || m.role === "user";
+      const bg = isHuman ? "bg-blue-50 border-blue-100" : "bg-slate-50 border-slate-200";
+      const label = isHuman ? "user" : "bot";
+      return `
+        <div class="border rounded-lg p-3 ${bg}">
+          <div class="text-xs uppercase tracking-wide text-slate-500 mb-1">${label}</div>
+          <div class="whitespace-pre-wrap mono text-sm">${escapeHtml(m.content)}</div>
+        </div>
+      `;
+    }
+
+    document.getElementById("back-btn").addEventListener("click", () => {
+      userDetailView.hidden = true;
+      userListView.hidden = false;
+    });
+
+    // ── Refresh ────────────────────────────────────────────────────────
+    async function refresh() {
+      try {
+        const [stats, users] = await Promise.all([
+          api("/admin/stats"),
+          api("/admin/users"),
+        ]);
+        renderStats(stats);
+        allUsers = users.users;
+        renderUsers(allUsers);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    document.getElementById("refresh-btn").addEventListener("click", refresh);
+
+    function escapeHtml(s) {
+      if (s == null) return "";
+      return String(s)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
+    // ── Boot ───────────────────────────────────────────────────────────
+    if (getToken()) {
+      // Have a token; verify it works.
+      api("/admin/stats").then(showApp).catch(showLogin);
+    } else {
+      showLogin();
+    }
+  </script>
+</body>
+</html>
