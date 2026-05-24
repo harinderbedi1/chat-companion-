@@ -15,8 +15,9 @@ to install.
 
 ## Step 1 — Get the dependencies in
 
+From the repo root:
+
 ```bash
-cd service
 python -m venv .venv
 source .venv/bin/activate          # macOS / Linux
 .venv\Scripts\activate             # Windows
@@ -125,7 +126,7 @@ curl http://localhost:8765/ready
 ```
 
 The SQLite database file `companion.db` was just created in the
-`service/` directory.
+repo root.
 
 ---
 
@@ -244,7 +245,7 @@ must be set or the service won't start.
 | `BOT_LLM_FALLBACK_BASE_URL` | unset | Same idea for the fallback model. |
 | `BOT_LLM_TIMEOUT_SECONDS` | `30` | How long we'll wait for a single LLM call to complete before giving up and falling back. Bump higher if you're seeing premature timeouts with slow models. |
 | `BOT_MAX_OUTPUT_TOKENS` | `800` | The hard cap on how many tokens (≈ words/punctuation) the AI may produce per reply. Higher = longer replies + more cost. |
-| `BOT_TEMPERATURE` | `0.4` | How random the AI's output is. 0 = deterministic (same input → same output). 1 = creative. 0.4 is a balanced default for supportive chat. |
+| `BOT_TEMPERATURE` | `0.5` | How random the AI's output is. 0 = deterministic (same input → same output). 1 = creative. 0.5 is a balanced default for supportive chat. |
 
 ### AI provider API keys (set the ones you use)
 
@@ -366,7 +367,7 @@ Auto-generated OpenAPI / Swagger UI for the live service.
 If you'd rather not set up Python locally:
 
 ```bash
-# In service/, after setting up your .env (step 2):
+# From the repo root, after setting up your .env (step 2):
 docker compose up --build
 
 # Stop:

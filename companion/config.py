@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     llm_fallback_base_url: Optional[str] = None
     llm_timeout_seconds: int = 30
     max_output_tokens: int = 800
-    temperature: float = 0.4
+    temperature: float = 0.5
 
     # ── Reply bounds (safety) ────────────────────────────────────────────
     min_reply_chars: int = 5
